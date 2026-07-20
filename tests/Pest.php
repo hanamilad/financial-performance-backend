@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /*
@@ -12,10 +11,15 @@ use Tests\TestCase;
 | case class. By default, that class is "PHPUnit\Framework\TestCase". Of course, you may
 | need to change it using the "pest()" function to bind different classes or traits.
 |
+| TestCase carries the test-database safety guard, so every Feature test boots
+| it. RefreshDatabase is NOT applied globally: only DB-dependent tests opt in
+| with `uses(RefreshDatabase::class)` (FOUNDATION-003). Tests that issue DDL —
+| e.g. ForeignKeyEnforcementTest — must stay off RefreshDatabase because MySQL
+| implicitly commits DDL, which would break the wrapping transaction.
+|
 */
 
 pest()->extend(TestCase::class)
- // ->use(RefreshDatabase::class)
     ->in('Feature');
 
 /*

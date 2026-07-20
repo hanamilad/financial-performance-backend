@@ -110,6 +110,10 @@ services:
     volumes:
       - fpp-mysql-data:/var/lib/mysql
       - ./docker/mysql/my.cnf:/etc/mysql/fpp-source/my.cnf:ro
+      # Init scripts run automatically on a fresh volume (creates the isolated
+      # `financial_performance_test` database). On an existing volume the same
+      # file is run manually — see README "Running tests" (FOUNDATION-003).
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
     networks:
       - fpp-local
     healthcheck:

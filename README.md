@@ -113,6 +113,46 @@ docker compose ps
 
 ---
 
+## Running tests
+
+Tests run inside Docker against **MySQL 8.4**, not SQLite, using a dedicated
+database `financial_performance_test`. The development database
+`financial_performance` is never touched: `phpunit.xml` forces the connection to
+the test database, and a safety guard in `tests/TestCase.php` aborts the suite
+**before any migration** if the environment is not `testing`/`mysql`/
+`financial_performance_test`.
+
+The test database is created by a single init script — the one source of truth,
+never duplicated as SQL here:
+
+```text
+docker/mysql/init/01-create-test-database.sh
+```
+
+**Fresh clone (empty volume):** MySQL runs the script automatically from
+`/docker-entrypoint-initdb.d` on first `docker compose up`. Nothing to do.
+
+**Existing volume:** `docker-entrypoint-initdb.d` does not run retroactively, so
+after pulling this change run the **same** script once by hand (no `down -v`, no
+data loss):
+
+```powershell
+docker compose exec mysql sh /docker-entrypoint-initdb.d/01-create-test-database.sh
+```
+
+Then run the suite:
+
+```powershell
+docker compose exec app php artisan test --compact
+```
+
+> **Warning:** never use `docker compose down -v` to "reset" for tests — it
+> deletes the `fpp-mysql-data` volume and the entire local development database
+> with it. The test database lives in the same volume; recreate it with the init
+> script above, not by wiping the volume.
+
+---
+
 ## Queue worker
 
 The `worker` service currently runs:
