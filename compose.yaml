@@ -1,0 +1,166 @@
+# Local development stack — financial-performance-backend.
+#
+# This is the only compose file for this repository (DEC-033). There is no
+# compose.override.yaml, and compose.production.yaml is deferred to Phase 16
+# (DEC-030).
+#
+# No secret is written here. Every credential is interpolated from ./.env,
+# which is excluded from Git (DEC-032). The `:?` guards make a missing .env
+# fail immediately with a readable message instead of letting MySQL start
+# with empty credentials and fail later for a misleading reason.
+
+name: fpp
+
+x-app-image: &app-image
+  build:
+    context: .
+    target: dev
+  image: fpp-backend:local
+
+x-app-common: &app-common
+  <<: *app-image
+  restart: unless-stopped
+  volumes:
+    - ./:/var/www/html
+  environment:
+    DB_HOST: mysql
+    DB_PORT: 3306
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - fpp-local
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./public:/var/www/html/public:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - fpp-local
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/up >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # HTTP request handling only — no queue, no cron.
+  app:
+    <<: *app-common
+    command: ["php-fpm"]
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(@fsockopen(\"127.0.0.1\", 9000) ? 0 : 1);'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Queue worker. Runs `queue:work` until Horizon is installed, at which point
+  # this command becomes `php artisan horizon` (DEC-028). The two must never
+  # run at the same time.
+  worker:
+    <<: *app-common
+    command: ["php", "artisan", "queue:work", "redis", "--tries=3", "--timeout=90"]
+    stop_signal: SIGTERM
+    stop_grace_period: 100s
+
+  # A single long-lived `schedule:work` process replaces cron in containers.
+  scheduler:
+    <<: *app-common
+    command: ["php", "artisan", "schedule:work"]
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    # MySQL refuses to read a world-writable config file, and every file
+    # bind-mounted from Windows is world-writable. So my.cnf is mounted to a
+    # staging path and copied into conf.d with a sane mode before mysqld
+    # starts. This keeps docker/mysql/my.cnf the single source of truth
+    # instead of duplicating its settings as command-line flags.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        cp /etc/mysql/fpp-source/my.cnf /etc/mysql/conf.d/zzz-app.cnf
+        chmod 0444 /etc/mysql/conf.d/zzz-app.cnf
+        exec docker-entrypoint.sh "$$@"
+      - bash
+    command: ["mysqld"]
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:?DB_DATABASE is not set — copy .env.example to .env first}
+      MYSQL_USER: ${DB_USERNAME:?DB_USERNAME is not set — copy .env.example to .env first}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is not set — copy .env.example to .env first}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is not set — copy .env.example to .env first}
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - fpp-mysql-data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/fpp-source/my.cnf:ro
+    networks:
+      - fpp-local
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root --password=\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # Queue + cache + sessions + locks + rate limiting + idempotency keys.
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - fpp-redis-data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - fpp-local
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Local SMTP sink for password-reset and notification testing (DEC-034).
+  # Local only — production uses the domain's official SMTP (DEC-022).
+  # SMTP :1025 stays internal to the network; only the UI is published.
+  #
+  # The UI is published on host 8026, not the originally approved 8025, because
+  # Laragon ships its own Mailpit already bound to 8025. Same rationale as
+  # DEC-029 (8080/3307/6380) — avoid conflicting with Laragon.
+  mailpit:
+    image: axllent/mailpit:v1.30.4
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "127.0.0.1:8026:8025"
+    networks:
+      - fpp-local
+
+volumes:
+  fpp-mysql-data:
+  fpp-redis-data:
+
+networks:
+  fpp-local:
+    driver: bridge

@@ -1,0 +1,41 @@
+# Build context exclusions.
+# The local stack bind-mounts the project, so the image only needs a minimal
+# context. Everything host-specific or secret is excluded.
+
+.git
+.gitattributes
+.gitignore
+
+.env
+.env.*
+!.env.example
+
+vendor
+node_modules
+public/build
+public/hot
+public/storage
+
+storage/logs
+storage/framework/cache/data
+storage/framework/sessions
+storage/framework/testing
+storage/framework/views
+storage/pail
+
+database/database.sqlite
+
+.phpunit.cache
+.phpunit.result.cache
+
+.agents
+.claude
+.codex
+.cursor
+.idea
+.vscode
+.zed
+
+Dockerfile
+.dockerignore
+compose.yaml

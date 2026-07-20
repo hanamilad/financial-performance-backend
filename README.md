@@ -1,58 +1,171 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Financial Performance Platform — Backend
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel API backend for the restaurant and café financial performance platform.
 
-## About Laravel
+- **Repository:** `financial-performance-backend`
+- **Stack:** Laravel 13 · PHP 8.4 · MySQL 8.4 · Redis 7.4 · Nginx
+- **Local runtime:** Docker Compose (`compose.yaml`)
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Architecture and product specifications live in the separate `project-docs`
+repository. Decisions referenced below (`DEC-0xx`) are recorded in
+`project-docs/workflow/DECISIONS_LOG.md`.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+---
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Requirements
 
-## Learning Laravel
+- Docker Desktop with the WSL2 backend, running.
+- The drive holding this repository shared with Docker Desktop
+  (Settings → Resources → File sharing).
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+PHP, Composer and MySQL are **not** required on the host — everything runs in
+containers.
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+---
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## First run
 
-## Agentic Development
+```powershell
+# 1. Create your local environment file.
+copy .env.example .env
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+# 2. Fill in the two passwords in .env:
+#      DB_PASSWORD=...
+#      MYSQL_ROOT_PASSWORD=...
+#    compose.yaml reads them from here; no credential is stored in the
+#    compose file itself (DEC-032).
 
-```bash
-composer require laravel/boost --dev
+# 3. Build and start.
+docker compose build
+docker compose up -d
 
-php artisan boost:install
+# 4. Install PHP dependencies inside the container (DEC-031).
+docker compose exec app composer install
+
+# 5. Generate an application key if .env has an empty APP_KEY.
+docker compose exec app php artisan key:generate
+
+# 6. Create the schema.
+docker compose exec app php artisan migrate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Then open <http://localhost:8080/up>.
 
-## Contributing
+`.env` must exist before `docker compose up`. Without it Compose fails fast
+with an explicit message naming the missing variable, rather than starting
+MySQL with empty credentials and failing later for a misleading reason.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+---
 
-## Code of Conduct
+## Services and ports
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+| Service | Purpose | Host port | Container port |
+|---|---|---|---|
+| `nginx` | Single HTTP entry point | **8080** | 80 |
+| `app` | PHP-FPM — HTTP requests only | — | 9000 (internal only) |
+| `worker` | Queue worker | — | — |
+| `scheduler` | `schedule:work` loop | — | — |
+| `mysql` | Database | **3307** | 3306 |
+| `redis` | Queue, cache, sessions, locks | **6380** | 6379 |
+| `mailpit` | Local SMTP sink | **8026** (UI) | 8025 |
 
-## Security Vulnerabilities
+Host ports avoid Laragon's defaults (DEC-029). Laragon also ships its own
+Mailpit on 8025, so ours is published on **8026** instead.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+**Inside the Docker network the standard ports always apply** — `DB_HOST=mysql`
+with port 3306, `REDIS_HOST=redis` with port 6379. The alternate host ports are
+only for Windows tools such as TablePlus or DBeaver:
 
-## License
+- MySQL: `127.0.0.1:3307`
+- Redis: `127.0.0.1:6380`
+- Mailpit UI: <http://localhost:8026>
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+`app`, `worker` and `scheduler` all run the same image with different commands.
+
+---
+
+## Daily commands
+
+All Composer and Artisan commands run **inside the container** (DEC-031). The
+host's PHP lacks the `redis` and `pcntl` extensions, so running them on the
+host will fail once Redis-backed drivers are in use.
+
+```powershell
+docker compose up -d
+docker compose down                  # stop; keeps database data
+
+docker compose exec app php artisan migrate
+docker compose exec app php artisan tinker
+docker compose exec app composer install
+
+docker compose exec app ./vendor/bin/pint          # format
+docker compose exec app ./vendor/bin/pint --test   # check only
+docker compose exec app php artisan test --compact
+
+docker compose logs -f app worker
+docker compose ps
+```
+
+> **Warning:** `docker compose down -v` deletes the `fpp-mysql-data` volume and
+> with it the entire local database. It is intended only for a clean
+> first-time bootstrap, before any real data exists (DEC / plan constraint N5).
+> For everyday use run `docker compose down` without `-v`.
+
+---
+
+## Queue worker
+
+The `worker` service currently runs:
+
+```text
+php artisan queue:work redis --tries=3 --timeout=90
+```
+
+When Horizon is installed in a later slice, this command is replaced by
+`php artisan horizon`. **`queue:work` and Horizon must never run at the same
+time** on the same connection — that causes double processing (DEC-028).
+
+---
+
+## Connecting clients
+
+### Next.js admin panel
+
+`admin-web` runs on the host (not in this stack), and points at:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8080
+```
+
+Sanctum, CORS and `SESSION_DOMAIN` are deliberately **not** configured yet;
+they belong to the authentication slice (DEC-035).
+
+### Expo mobile app
+
+| Target | Base URL |
+|---|---|
+| Android emulator | `http://10.0.2.2:8080` |
+| iOS simulator | `http://localhost:8080` |
+| Physical device | `http://<windows-lan-ip>:8080` |
+
+For a physical device: the phone and PC must share a Wi-Fi network, the
+Windows network profile must be **Private**, and an inbound Windows Firewall
+rule for TCP 8080 is required. Without that rule the connection fails silently
+— it is the most common cause of "the app can't reach the API" locally.
+
+Get the LAN address with `ipconfig` (IPv4 of the Wi-Fi adapter).
+
+---
+
+## Notes
+
+- **Arabic content:** MySQL runs `utf8mb4` / `utf8mb4_0900_ai_ci` throughout.
+  `DB_COLLATION` in `.env` pins Laravel to the same collation so the schema and
+  the server agree.
+- **Configuration files** live in `docker/`. The PHP ones are baked into the
+  image, so changing them requires `docker compose build app`.
+- **`.env` is never committed.** It is excluded by `.gitignore`.
+- **Bind-mount performance:** the project is mounted across the Windows↔WSL2
+  boundary, which is noticeably slower than a native Linux filesystem. This is
+  acceptable at the current size; moving the repository inside WSL2 is the
+  remedy if it ever becomes a problem.
