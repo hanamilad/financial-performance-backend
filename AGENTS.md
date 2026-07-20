@@ -153,3 +153,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - Do NOT delete tests without approval.
 
 </laravel-boost-guidelines>
+
+## Financial Performance Platform project rules
+
+Read and follow `AGENTS.project.md` in addition to the existing instructions.
