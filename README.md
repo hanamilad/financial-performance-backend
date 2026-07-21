@@ -258,6 +258,52 @@ under **Failed Jobs**.
 
 ---
 
+## Monitoring — Pulse
+
+<http://localhost:8080/pulse>
+
+Access follows Pulse's own rule, `Gate::check('viewPulse')`, which the package
+defines as "the environment is `local`":
+
+- **local** → open, which is what this stack is.
+- **any other environment** → **403**.
+
+No gate, provider, Basic Auth, custom middleware or shared secret is added by
+this project. The gate is redefined and bound to `SYSTEM_ADMIN` in the
+authentication slice (DEC-035); until then `/pulse` is a local-only tool.
+
+**Pulse writes straight into the application's MySQL database.** The `storage`
+ingest driver stores entries at the end of the request, so there is **no
+`pulse:work` and no `pulse:check` process, and no Pulse service in
+`compose.yaml`**. Data lives in `pulse_values`, `pulse_entries` and
+`pulse_aggregates` inside `financial_performance`, and is trimmed
+automatically during ingest — no scheduled task is involved.
+
+| Recorder | State | Why |
+|---|---|---|
+| Exceptions | **on** | Highest value for the lowest write cost |
+| Queues | **on** | Complements Horizon with history |
+| Slow jobs | **on** | Threshold 1000ms |
+| Slow queries | **on** | Threshold 1000ms, with the calling location |
+| Slow requests | **on** | Threshold 1000ms |
+| Cache interactions | off | Highest cardinality, heaviest write load |
+| Slow outgoing requests | off | No external integrations in the MVP |
+| User requests / user jobs | off | No authentication yet — everything would be a guest |
+| Servers | off | Only records while a `pulse:check` daemon runs; none exists |
+
+Retention is **7 days** and the sample rate is **1** (nothing is sampled away)
+— sized for a small VPS with low traffic.
+
+```powershell
+docker compose exec app php artisan pulse:clear   # drop all collected data
+```
+
+Server monitoring and production authorization are deliberately deferred:
+server metrics need their own long-running process, and the dashboard stays
+local-only until authentication exists.
+
+---
+
 ## Connecting clients
 
 ### Next.js admin panel
