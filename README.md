@@ -187,6 +187,74 @@ curl -i http://localhost:8080/api/v1/health
 
 ---
 
+## API documentation — Scramble
+
+| What | URL |
+|---|---|
+| Documentation UI | <http://localhost:8080/docs/api> |
+| OpenAPI 3.1 document | <http://localhost:8080/docs/api.json> |
+
+```powershell
+curl.exe -i http://localhost:8080/docs/api.json
+```
+
+`dedoc/scramble` generates both from the routes and the controller code — there
+is no checked-in specification to keep in sync, and no Swagger, Scribe or
+second OpenAPI package (DEC-009).
+
+**Only `/api/v1` is documented.** `config/scramble.php` sets
+`api_path` to `api/v1`, which puts that prefix in the document's server URL and
+strips it from every path — so the readiness check appears as `/health` under
+the server `http://localhost:8080/api/v1`, never as `/api/api/v1/health`. `/up`,
+`/horizon`, `/pulse` and `/docs/api*` sit outside that prefix and are therefore
+absent from the document.
+
+Access follows the same rule as the Horizon and Pulse dashboards, using
+Scramble's own `RestrictedDocsAccess` middleware:
+
+- **local** → open, which is what this stack is.
+- **any other environment** → **403**, because nothing defines the
+  `viewApiDocs` gate the middleware falls back to.
+
+No Basic Auth, custom middleware or shared secret is involved. The gate is
+reopened and bound to `SYSTEM_ADMIN` in the authentication slice (DEC-035);
+until then the documentation is a local-only tool.
+
+### Bearer tokens
+
+The document publishes an HTTP **bearer** security scheme under
+`components.securitySchemes`, so the contract already describes how protected
+routes will be called:
+
+```http
+Authorization: Bearer <token>
+```
+
+`App\Providers\ScrambleServiceProvider` registers that scheme, and
+`security_strategy` in `config/scramble.php` is set to Scramble's
+`MiddlewareAuthSecurityStrategy`. Together they mean no further configuration is
+needed later: the first route that carries `auth` or `auth:sanctum` middleware
+is documented as protected automatically, and every route without it is marked
+public in the same pass.
+
+**What you see today.** The documentation UI is Stoplight Elements, which
+renders the token box on an operation only when that operation requires a
+security scheme. Right now the API has exactly one endpoint —
+`GET /api/v1/health` — and it is **public** (DEC-039), so it carries no security
+requirement and the UI shows no token box yet. That is the correct outcome
+rather than a gap to work around: making the box appear today would mean either
+documenting the health check as protected, which it is not, or adding a fake
+endpoint. The box appears by itself, on the protected operations, as soon as the
+authentication slice adds the first one.
+
+When it does, the token is pasted into the operation's **Security Scheme** box
+in the *Try It* panel. Paste the raw token only — Elements adds the `Bearer `
+prefix itself. Nothing is persisted: the value lives in the browser tab, and no
+token, secret or credential belongs in this repository, in `.env` or in this
+file.
+
+---
+
 ## Queue worker — Horizon
 
 The `worker` service runs Laravel Horizon, which supervises the queue
