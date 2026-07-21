@@ -67,12 +67,20 @@ services:
       retries: 10
       start_period: 20s
 
-  # Queue worker. Runs `queue:work` until Horizon is installed, at which point
-  # this command becomes `php artisan horizon` (DEC-028). The two must never
-  # run at the same time.
+  # Queue worker — Horizon (FOUNDATION-005), which supersedes the temporary
+  # `queue:work redis` command of DEC-028. Horizon owns the worker processes
+  # now; `queue:work` must never be started alongside it on the same
+  # connection, or every job would be processed twice.
+  #
+  # Worker count, tries and timeout come from config/horizon.php, not from
+  # flags here, so the dashboard and the running processes can never disagree.
+  #
+  # SIGTERM is Horizon's graceful shutdown signal: the master supervisor stops
+  # accepting work and lets the current job finish. The grace period stays
+  # above the 60s job timeout so a running job is never cut off mid-flight.
   worker:
     <<: *app-common
-    command: ["php", "artisan", "queue:work", "redis", "--tries=3", "--timeout=90"]
+    command: ["php", "artisan", "horizon"]
     stop_signal: SIGTERM
     stop_grace_period: 100s
 

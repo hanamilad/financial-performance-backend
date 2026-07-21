@@ -63,7 +63,7 @@ MySQL with empty credentials and failing later for a misleading reason.
 |---|---|---|---|
 | `nginx` | Single HTTP entry point | **8080** | 80 |
 | `app` | PHP-FPM — HTTP requests only | — | 9000 (internal only) |
-| `worker` | Queue worker | — | — |
+| `worker` | Horizon queue worker | — | — |
 | `scheduler` | `schedule:work` loop | — | — |
 | `mysql` | Database | **3307** | 3306 |
 | `redis` | Queue, cache, sessions, locks | **6380** | 6379 |
@@ -187,17 +187,74 @@ curl -i http://localhost:8080/api/v1/health
 
 ---
 
-## Queue worker
+## Queue worker — Horizon
 
-The `worker` service currently runs:
+The `worker` service runs Laravel Horizon, which supervises the queue
+processes itself:
 
 ```text
-php artisan queue:work redis --tries=3 --timeout=90
+php artisan horizon
 ```
 
-When Horizon is installed in a later slice, this command is replaced by
-`php artisan horizon`. **`queue:work` and Horizon must never run at the same
-time** on the same connection — that causes double processing (DEC-028).
+**Never start `queue:work` alongside it** on the same connection — both would
+consume the same Redis queue and every job would run twice. Horizon replaces
+the temporary `queue:work redis` command (DEC-028).
+
+Worker settings live in `config/horizon.php`, not in command-line flags, so the
+dashboard and the running processes can never disagree:
+
+| Setting | Value | Why |
+|---|---|---|
+| Supervisors | 1 | One workload, nothing to prioritise yet |
+| Connection / queue | `redis` / `default` | The only queue in use |
+| `balance` | `false` | No auto scaling — a fixed process count |
+| `maxProcesses` | 1 | Sized for a local stack and a small VPS |
+| `tries` | 3 | Conservative retry for transient failures |
+| `timeout` | 60s | Must stay **below** `retry_after` (90s), otherwise a slow job is released while still running and processed twice |
+
+```powershell
+docker compose logs -f worker              # what the worker is processing
+docker compose restart worker              # graceful: SIGTERM, current job finishes
+docker compose exec worker php artisan horizon:terminate   # after deploying new code
+```
+
+### Dashboard
+
+<http://localhost:8080/horizon>
+
+Access is Horizon's built-in check — `Gate::check('viewHorizon') || environment('local')`:
+
+- **local** → open, which is what this stack is.
+- **any other environment** → **403**, because the `viewHorizon` gate in
+  `app/Providers/HorizonServiceProvider.php` denies everyone.
+
+There is no user the gate could legitimately allow yet: authentication is
+deferred to its own slice (DEC-035). The gate is reopened there and bound to
+`SYSTEM_ADMIN`. No Basic Auth, no custom middleware and no shared secret is
+involved.
+
+`horizon:snapshot` scheduling, queue metrics and failure notifications are
+deliberately **not** configured yet.
+
+### Verifying the queue end to end
+
+`App\Jobs\Infrastructure\HorizonSmokeTestJob` exists only to prove the path
+`dispatch → Redis → Horizon worker` works. It has no business logic:
+
+```powershell
+docker compose exec app php artisan tinker
+>>> App\Jobs\Infrastructure\HorizonSmokeTestJob::dispatch();
+```
+
+Then check all three:
+
+```powershell
+docker compose logs --tail=20 worker    # ... HorizonSmokeTestJob ... DONE
+docker compose exec app sh -c 'tail -n 5 storage/logs/laravel-$(date +%F).log'
+```
+
+and the dashboard's **Completed Jobs** list — the job must appear there, not
+under **Failed Jobs**.
 
 ---
 
