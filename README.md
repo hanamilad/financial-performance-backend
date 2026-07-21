@@ -153,6 +153,40 @@ docker compose exec app php artisan test --compact
 
 ---
 
+## Health endpoints
+
+Two separate endpoints with two different jobs (DEC-039):
+
+| Endpoint | Kind | Checks | Used by |
+|---|---|---|---|
+| `GET /up` | Liveness | Is the process alive and able to boot? No dependencies. | Docker `healthcheck` in `compose.yaml` |
+| `GET /api/v1/health` | Readiness | Also reaches MySQL and Redis. | Load balancers, deploy gates, humans |
+
+`/api/v1/health` returns **200** when both services answer and **503** when
+either one does not — the process stays up either way, so a dependency outage
+never triggers a container restart. The body is always JSON, with
+`Cache-Control: no-store`:
+
+```json
+{ "status": "healthy", "services": { "database": "healthy", "redis": "healthy" } }
+```
+
+The probe uses the dedicated `health_mysql` / `health_redis` connections with
+short connect timeouts, so it never changes the timeouts of the application's
+own connections (DEC-040).
+
+The endpoint is **unauthenticated at this stage** and deliberately reveals
+nothing beyond which of the two services is up: no exception text, host, port,
+database name, credential, SQLSTATE, stack trace, timing or version. Restricting
+it at the network layer is left to a later slice.
+
+```powershell
+curl -i http://localhost:8080/up
+curl -i http://localhost:8080/api/v1/health
+```
+
+---
+
 ## Queue worker
 
 The `worker` service currently runs:
