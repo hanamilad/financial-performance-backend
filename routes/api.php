@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Modules\Identity\Http\Controllers\AuthController;
+use App\Modules\Identity\Http\Controllers\MobileAuthController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -36,5 +37,20 @@ Route::prefix('v1')
                     Route::get('/me', [AuthController::class, 'me'])->name('me');
                     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
                 });
+
+                // Mobile client_user authentication via Sanctum bearer tokens,
+                // one token per device (AUTH-002).
+                Route::prefix('mobile')
+                    ->name('mobile.')
+                    ->group(function (): void {
+                        Route::post('/login', [MobileAuthController::class, 'login'])
+                            ->middleware('throttle:mobile-login')
+                            ->name('login');
+
+                        Route::middleware('auth:sanctum')->group(function (): void {
+                            Route::get('/me', [MobileAuthController::class, 'me'])->name('me');
+                            Route::post('/logout', [MobileAuthController::class, 'logout'])->name('logout');
+                        });
+                    });
             });
     });

@@ -33,13 +33,16 @@ class AppServiceProvider extends ServiceProvider
      */
     private function configureRateLimiters(): void
     {
-        RateLimiter::for('login', function (Request $request): array {
+        $perEmailAndIp = function (Request $request): array {
             $email = Str::lower((string) $request->input('email'));
 
             return [
                 Limit::perMinute(5)->by($email.'|'.$request->ip()),
                 Limit::perMinute(20)->by((string) $request->ip()),
             ];
-        });
+        };
+
+        RateLimiter::for('login', $perEmailAndIp);
+        RateLimiter::for('mobile-login', $perEmailAndIp);
     }
 }

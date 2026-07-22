@@ -46,3 +46,11 @@ it('documents the identity and logout endpoints as protected', function () {
 it('keeps the readiness endpoint public alongside authentication', function () {
     expect(authApiDocument()['paths']['/health']['get']['security'])->toBe([]);
 });
+
+it('documents mobile login as public and mobile identity/logout as protected', function () {
+    $paths = authApiDocument()['paths'];
+
+    expect($paths['/auth/mobile/login']['post']['security'])->toBe([])
+        ->and($paths['/auth/mobile/me']['get'])->not->toHaveKey('security')
+        ->and($paths['/auth/mobile/logout']['post'])->not->toHaveKey('security');
+});
