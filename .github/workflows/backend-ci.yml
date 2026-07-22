@@ -1,0 +1,146 @@
+# Backend CI — financial-performance-backend (FOUNDATION-008).
+#
+# Runs the checks that already exist in this repository, against the same
+# engines the local Docker stack uses: PHP 8.4, MySQL 8.4 and Redis. Nothing
+# here deploys, publishes or writes to any environment — there is no CD stage
+# and no real secret is involved (DEC-030 defers deployment entirely).
+#
+# Database safety: the MySQL service below is created empty, for this run only,
+# and holds exactly one database — `financial_performance_test`. The
+# development database `financial_performance` is never created, so it cannot
+# be reached even by a misconfigured suite. That is the outermost of three
+# layers; `phpunit.xml` forces the connection and database name, and the guard
+# in `tests/TestCase.php` aborts before any migration if either is wrong
+# (DEC-037, DEC-038).
+
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Read-only: the workflow never pushes, comments or releases.
+permissions:
+  contents: read
+
+# A newer commit on the same branch makes an in-flight run obsolete.
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: PHP 8.4 · MySQL 8.4 · Redis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      # Credentials here are throwaway values that exist only inside this
+      # runner, for the lifetime of this job. They are deliberately literal
+      # rather than repository secrets: a secret would imply the value matters
+      # somewhere, and none of these reach any real environment.
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_DATABASE: financial_performance_test
+          MYSQL_USER: fpp
+          MYSQL_PASSWORD: ci-app-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+          --health-start-period=30s
+
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      # Real environment variables win over .env, which Laravel loads
+      # immutably. The values below therefore replace the Docker-network
+      # hostnames in .env.example without editing that file.
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: financial_performance_test
+      DB_USERNAME: fpp
+      DB_PASSWORD: ci-app-password
+      # Matches docker/mysql/my.cnf, so migrations build the same schema here
+      # as they do locally.
+      DB_CHARSET: utf8mb4
+      DB_COLLATION: utf8mb4_0900_ai_ci
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          # The extension set the application actually uses — the same list the
+          # Dockerfile installs, minus the FPM-only ones.
+          extensions: bcmath, intl, pcntl, pdo_mysql, redis, sockets, zip
+          coverage: none
+
+      - name: Validate composer.json against composer.lock
+        run: composer validate --strict
+
+      - name: Resolve the Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Prepare the Laravel environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Confirm CI can reach the test database and nothing else
+        run: |
+          php -r '
+            $pdo = new PDO(
+                sprintf("mysql:host=%s;port=%s", getenv("DB_HOST"), getenv("DB_PORT")),
+                getenv("DB_USERNAME"),
+                getenv("DB_PASSWORD")
+            );
+            $databases = $pdo->query("SHOW DATABASES")->fetchAll(PDO::FETCH_COLUMN);
+            if (in_array("financial_performance", $databases, true)) {
+                fwrite(STDERR, "Refusing to continue: a development database is reachable from CI.\n");
+                exit(1);
+            }
+            if (! in_array("financial_performance_test", $databases, true)) {
+                fwrite(STDERR, "The isolated test database was not created.\n");
+                exit(1);
+            }
+            printf("Reachable databases: %s\n", implode(", ", $databases));
+          '
+
+      - name: Run the test suite
+        run: php artisan test --compact
+
+      - name: Check code formatting
+        run: vendor/bin/pint --test
