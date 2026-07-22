@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Identity\Console\Commands\CreateSystemAdminCommand;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,8 +13,14 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withCommands([
+        CreateSystemAdminCommand::class,
+    ])
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Prepends EnsureFrontendRequestsAreStateful to the api group so
+        // requests from the configured stateful domains authenticate with the
+        // session cookie and CSRF token instead of a bearer token (AUTH-001).
+        $middleware->statefulApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

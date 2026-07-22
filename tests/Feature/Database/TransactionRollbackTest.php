@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Identity\Enums\UserRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 
@@ -14,6 +15,7 @@ test('InnoDB rolls back a transaction using an existing migrated table', functio
         'name' => 'Rollback Probe',
         'email' => 'rollback-probe@example.test',
         'password' => bcrypt('secret'),
+        'role' => UserRole::SystemAdmin->value,
     ]);
 
     expect(DB::table('users')->count())->toBe($before + 1);

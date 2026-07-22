@@ -102,9 +102,10 @@ it('publishes a bearer security scheme', function () {
 it('keeps the readiness endpoint public', function () {
     $document = scrambleOpenApiDocument();
 
-    // Two ways an operation can end up requiring a token: its own `security`,
-    // or a document-wide default it would inherit. Neither may exist here —
-    // GET /api/v1/health is unauthenticated (DEC-039).
-    expect($document['paths']['/health']['get'])->not->toHaveKey('security')
-        ->and($document)->not->toHaveKey('security');
+    // AUTH-001 added the first auth:sanctum route, so MiddlewareAuthSecurityStrategy
+    // now publishes a document-wide bearer default and marks every unauthenticated
+    // operation with an explicit empty `security` override. GET /api/v1/health must
+    // carry that empty override, so no token is ever required of or sent to it
+    // (DEC-039, DEC-043).
+    expect($document['paths']['/health']['get']['security'])->toBe([]);
 });

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Modules\Identity\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -19,4 +20,21 @@ Route::prefix('v1')
     ->name('api.v1.')
     ->group(function (): void {
         Route::get('/health', HealthController::class)->name('health');
+
+        Route::prefix('auth')
+            ->name('auth.')
+            ->group(function (): void {
+                // Public: system-admin cookie login, throttled per email+IP.
+                Route::post('/login', [AuthController::class, 'login'])
+                    ->middleware('throttle:login')
+                    ->name('login');
+
+                // Protected: resolved from the Sanctum stateful session. The
+                // auth:sanctum middleware is also what makes Scramble document
+                // these two operations as requiring authentication.
+                Route::middleware('auth:sanctum')->group(function (): void {
+                    Route::get('/me', [AuthController::class, 'me'])->name('me');
+                    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+                });
+            });
     });

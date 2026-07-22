@@ -65,7 +65,8 @@ return [
          */
         'description' => 'REST API for the restaurant and café financial performance platform. '
             .'Only routes under /api/v1 are documented. '
-            .'Authentication is not implemented yet — the only endpoint currently published is the public readiness check.',
+            .'System-admin authentication uses Sanctum stateful cookies: call POST /auth/login, '
+            .'then the session-protected /auth/me and /auth/logout endpoints.',
     ],
 
     /*

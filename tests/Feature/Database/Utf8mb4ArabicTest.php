@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Identity\Enums\UserRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 
@@ -12,6 +13,7 @@ test('Arabic utf8mb4 content survives a database round-trip', function () {
         'name' => $arabic,
         'email' => 'arabic-roundtrip@example.test',
         'password' => bcrypt('secret'),
+        'role' => UserRole::SystemAdmin->value,
     ]);
 
     $stored = DB::table('users')
