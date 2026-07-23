@@ -131,6 +131,21 @@ services:
       retries: 15
       start_period: 30s
 
+  phpmyadmin:
+    image: phpmyadmin:latest
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "127.0.0.1:8081:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - fpp-local
+
   # Queue + cache + sessions + locks + rate limiting + idempotency keys.
   redis:
     image: redis:7.4-alpine
