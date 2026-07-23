@@ -10,8 +10,11 @@ FROM php:8.4-fpm-alpine AS base
 # survive the removal of the virtual .build-deps package below.
 RUN apk add --no-cache \
         bash \
+        freetype \
         icu-data-full \
         icu-libs \
+        libjpeg-turbo \
+        libpng \
         libzip \
         mariadb-client \
         tzdata
@@ -19,12 +22,17 @@ RUN apk add --no-cache \
 RUN set -eux; \
     apk add --no-cache --virtual .build-deps \
         $PHPIZE_DEPS \
+        freetype-dev \
         icu-dev \
+        libjpeg-turbo-dev \
+        libpng-dev \
         libzip-dev \
         linux-headers; \
     docker-php-ext-configure intl; \
+    docker-php-ext-configure gd --with-freetype --with-jpeg; \
     docker-php-ext-install -j"$(nproc)" \
         bcmath \
+        gd \
         intl \
         opcache \
         pcntl \
