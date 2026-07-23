@@ -4,13 +4,13 @@ namespace App\Modules\Imports\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Clients\Models\Branch;
+use App\Modules\Clients\Models\Client;
 use App\Modules\Imports\Enums\ImportBatchStatus;
 use App\Modules\Imports\Http\Requests\StoreImportRequest;
 use App\Modules\Imports\Http\Resources\ImportBatchDetailResource;
 use App\Modules\Imports\Http\Resources\ImportBatchResource;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Services\ValidatePerformanceImport;
-use App\Modules\Imports\Support\SalesDailySheet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -38,8 +38,9 @@ class ImportController extends Controller
 
     public function store(StoreImportRequest $request): JsonResponse
     {
+        $client = Client::findOrFail($request->integer('client_id'));
         $branch = Branch::findOrFail($request->integer('branch_id'));
-        $clientId = $request->integer('client_id');
+        $clientId = $client->id;
         $period = (string) $request->string('reporting_period');
 
         $existing = ImportBatch::query()
@@ -58,7 +59,7 @@ class ImportController extends Controller
             abort(409, 'يوجد استيراد سابق لنفس العميل والفرع والفترة. احذفه أولًا قبل رفع ملف جديد.');
         }
 
-        $result = $this->validator->validate($request->file('file'), $branch, $period);
+        $result = $this->validator->validate($request->file('file'), $client, $branch, $period);
         $passed = $result->passed();
 
         $batch = DB::transaction(function () use ($existing, $request, $clientId, $branch, $period, $result, $passed) {
@@ -78,7 +79,7 @@ class ImportController extends Controller
 
             if ($passed) {
                 $batch->rows()->createMany(array_map(fn (array $row) => [
-                    'sheet_name' => SalesDailySheet::NAME,
+                    'sheet_name' => $row['sheet_name'],
                     'row_number' => $row['row_number'],
                     'data' => $row['data'],
                 ], $result->validRows));

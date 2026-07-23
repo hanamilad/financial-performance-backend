@@ -5,8 +5,8 @@ namespace App\Modules\Imports\Support;
 final class ImportValidationResult
 {
     /**
-     * @param  list<array{row_number:int, data:array<string, mixed>}>  $validRows
-     * @param  list<array{row:int, column:string, value:mixed, reason:string}>  $errors
+     * @param  list<array{sheet_name:string, row_number:int, data:array<string, mixed>}>  $validRows
+     * @param  list<array{sheet:string, row:int, column:string, value:mixed, reason:string}>  $errors
      */
     public function __construct(
         public readonly array $validRows,

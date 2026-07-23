@@ -1,12 +1,9 @@
 <?php
 
-namespace App\Modules\Clients\Enums;
+namespace App\Modules\Imports\Enums\Concerns;
 
-enum EntityStatus: string
+trait HasValues
 {
-    case Active = 'active';
-    case Inactive = 'inactive';
-
     /**
      * @return list<string>
      */

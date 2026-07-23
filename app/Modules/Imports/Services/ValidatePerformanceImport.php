@@ -3,9 +3,14 @@
 namespace App\Modules\Imports\Services;
 
 use App\Modules\Clients\Models\Branch;
+use App\Modules\Clients\Models\Client;
+use App\Modules\Imports\Enums\ScopeCode;
+use App\Modules\Imports\Support\ColumnKind;
+use App\Modules\Imports\Support\ColumnSpec;
 use App\Modules\Imports\Support\ImportValidationResult;
 use App\Modules\Imports\Support\PerformanceWorkbookReader;
-use App\Modules\Imports\Support\SalesDailySheet;
+use App\Modules\Imports\Support\SheetDefinition;
+use App\Modules\Imports\Support\WorkbookDefinition;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Maatwebsite\Excel\Excel as ExcelFormat;
@@ -17,7 +22,7 @@ class ValidatePerformanceImport
 {
     private const MAX_ERRORS = 500;
 
-    public function validate(UploadedFile $file, Branch $branch, string $period): ImportValidationResult
+    public function validate(UploadedFile $file, Client $client, Branch $branch, string $period): ImportValidationResult
     {
         $reader = new PerformanceWorkbookReader;
 
@@ -26,77 +31,288 @@ class ValidatePerformanceImport
             // .xlsx extension, so maatwebsite cannot infer it and would throw.
             Excel::import($reader, $file, null, ExcelFormat::XLSX);
         } catch (Throwable) {
-            // A workbook that cannot be parsed at all is reported as one error
-            // rather than surfacing the library's internal exception message.
-            return $this->singleError('file', 'تعذّر قراءة ملف Excel. تأكد من أنه ملف صالح.');
+            return $this->singleError('file', 'file', 'تعذّر قراءة ملف Excel. تأكد من أنه ملف صالح.');
         }
 
-        if (! $reader->salesDailySheetFound) {
-            return $this->singleError(SalesDailySheet::NAME, 'ورقة SALES_DAILY غير موجودة في الملف.');
-        }
+        $branchCodeSet = array_flip($client->branches()->pluck('code')->all());
 
-        $rows = $reader->salesDailyRows;
-        $headerIndex = $this->findHeaderRow($rows);
-
-        if ($headerIndex === null) {
-            return $this->singleError('header', 'تعذّر العثور على صف عناوين الأعمدة داخل ورقة SALES_DAILY.');
-        }
-
-        $columnIndex = $this->mapColumns($rows[$headerIndex]);
-        $missing = array_values(array_diff(SalesDailySheet::REQUIRED_COLUMNS, array_keys($columnIndex)));
-
-        if ($missing !== []) {
-            $errors = [];
-            foreach ($missing as $column) {
-                $errors[] = ['row' => $headerIndex + 1, 'column' => $column, 'value' => null, 'reason' => 'عمود مطلوب مفقود.'];
-            }
-
-            return new ImportValidationResult([], $errors);
-        }
-
-        $validRows = [];
         $errors = [];
+        $validRows = [];
+        $branchReferences = [];
+        $declaredBranchCodes = [];
 
-        for ($index = $headerIndex + 1; $index < count($rows); $index++) {
-            if ($this->isEmptyRow($rows[$index], $columnIndex)) {
-                continue;
-            }
-
-            $excelRow = $index + 1;
-            [$data, $rowErrors] = $this->validateRow($rows[$index], $columnIndex, $branch, $period, $excelRow);
-
-            if ($rowErrors === []) {
-                $validRows[] = ['row_number' => $excelRow, 'data' => $data];
+        foreach (WorkbookDefinition::sheets() as $sheet) {
+            if (! ($reader->sheetFound[$sheet->name] ?? false)) {
+                $errors[] = $this->error($sheet->name, 0, 'sheet', null, "ورقة {$sheet->name} مطلوبة غير موجودة في الملف.");
 
                 continue;
             }
 
-            foreach ($rowErrors as $error) {
-                if (count($errors) >= self::MAX_ERRORS) {
-                    break 2;
+            $rows = $reader->sheetRows[$sheet->name];
+            $headerIndex = $this->findHeaderRow($rows, $sheet->anchorColumns());
+
+            if ($headerIndex === null) {
+                $errors[] = $this->error($sheet->name, 0, 'header', null, "تعذّر العثور على صف عناوين الأعمدة في ورقة {$sheet->name}.");
+
+                continue;
+            }
+
+            $columnIndex = $this->mapColumns($rows[$headerIndex]);
+            $missing = array_values(array_diff($sheet->requiredColumnNames(), array_keys($columnIndex)));
+
+            if ($missing !== []) {
+                foreach ($missing as $column) {
+                    $errors[] = $this->error($sheet->name, $headerIndex + 1, $column, null, 'عمود مطلوب مفقود.');
                 }
-                $errors[] = $error;
+
+                continue;
             }
+
+            for ($index = $headerIndex + 1; $index < count($rows); $index++) {
+                if ($this->isEmptyRow($rows[$index], $columnIndex, $sheet)) {
+                    continue;
+                }
+
+                $excelRow = $index + 1;
+                [$data, $rowErrors, $refs] = $this->validateRow($sheet, $rows[$index], $columnIndex, $branch, $period, $excelRow, $branchCodeSet);
+                array_push($branchReferences, ...$refs);
+
+                if ($rowErrors === []) {
+                    $validRows[] = ['sheet_name' => $sheet->name, 'row_number' => $excelRow, 'data' => $data];
+
+                    if ($sheet->name === WorkbookDefinition::BRANCHES) {
+                        $declaredBranchCodes[$data['branch_code']] = true;
+                    }
+
+                    continue;
+                }
+
+                array_push($errors, ...$rowErrors);
+            }
+
+            if (count($errors) >= self::MAX_ERRORS) {
+                break;
+            }
+        }
+
+        foreach ($this->crossSheetBranchErrors($branchReferences, $declaredBranchCodes) as $error) {
+            $errors[] = $error;
+        }
+
+        if (count($errors) > self::MAX_ERRORS) {
+            $errors = array_slice($errors, 0, self::MAX_ERRORS);
         }
 
         return new ImportValidationResult($validRows, $errors);
     }
 
-    private function singleError(string $column, string $reason): ImportValidationResult
+    /**
+     * @param  list<array{sheet:string, row:int, column:string, code:string}>  $references
+     * @param  array<string, bool>  $declaredBranchCodes
+     * @return list<array{sheet:string, row:int, column:string, value:mixed, reason:string}>
+     */
+    private function crossSheetBranchErrors(array $references, array $declaredBranchCodes): array
     {
-        return new ImportValidationResult([], [
-            ['row' => 0, 'column' => $column, 'value' => null, 'reason' => $reason],
-        ]);
+        if ($declaredBranchCodes === []) {
+            return [];
+        }
+
+        $errors = [];
+        foreach ($references as $reference) {
+            if (! isset($declaredBranchCodes[$reference['code']])) {
+                $errors[] = $this->error(
+                    $reference['sheet'], $reference['row'], $reference['column'], $reference['code'],
+                    'كود الفرع غير معرّف في ورقة BRANCHES.',
+                );
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @param  array<int, mixed>  $row
+     * @param  array<string, int>  $columnIndex
+     * @param  array<string, bool>  $branchCodeSet
+     * @return array{0: array<string, mixed>, 1: list<array{sheet:string, row:int, column:string, value:mixed, reason:string}>, 2: list<array{sheet:string, row:int, column:string, code:string}>}
+     */
+    private function validateRow(SheetDefinition $sheet, array $row, array $columnIndex, Branch $branch, string $period, int $excelRow, array $branchCodeSet): array
+    {
+        $data = [];
+        $errors = [];
+        $references = [];
+        $cell = fn (string $column) => $row[$columnIndex[$column]] ?? null;
+
+        foreach ($sheet->columns as $column) {
+            $raw = $cell($column->name);
+            $blank = is_string($raw) ? trim($raw) === '' : $raw === null;
+
+            if ($blank) {
+                if ($column->required) {
+                    $errors[] = $this->error($sheet->name, $excelRow, $column->name, null, 'قيمة مطلوبة مفقودة.');
+                }
+
+                continue;
+            }
+
+            [$value, $reason, $reference] = $this->validateCell($column, $raw, $branch, $period, $branchCodeSet);
+
+            if ($reason !== null) {
+                $errors[] = $this->error($sheet->name, $excelRow, $column->name, $raw, $reason);
+
+                continue;
+            }
+
+            $data[$column->name] = $value;
+
+            if ($reference !== null) {
+                $references[] = ['sheet' => $sheet->name, 'row' => $excelRow, 'column' => $column->name, 'code' => $reference];
+            }
+        }
+
+        return [$data, $errors, $references];
+    }
+
+    /**
+     * @param  array<string, bool>  $branchCodeSet
+     * @return array{0: mixed, 1: ?string, 2: ?string}
+     */
+    private function validateCell(ColumnSpec $column, mixed $raw, Branch $branch, string $period, array $branchCodeSet): array
+    {
+        switch ($column->kind) {
+            case ColumnKind::DateWithinPeriod:
+                $date = $this->parseDate($raw);
+                if ($date === null) {
+                    return [null, 'تاريخ غير صالح.', null];
+                }
+                if ($date->format('Y-m') !== $period) {
+                    return [null, 'التاريخ خارج الفترة المحددة.', null];
+                }
+
+                return [$date->format('Y-m-d'), null, null];
+
+            case ColumnKind::Month:
+                $month = $this->parseMonth($raw);
+                if ($month === null) {
+                    return [null, 'صيغة الشهر يجب أن تكون YYYY-MM.', null];
+                }
+                if ($month !== $period) {
+                    return [null, 'الشهر لا يطابق فترة التقرير.', null];
+                }
+
+                return [$month, null, null];
+
+            case ColumnKind::DecimalUnsigned:
+                $number = $this->parseDecimal($raw);
+                if ($number === null) {
+                    return [null, 'قيمة رقمية غير صالحة.', null];
+                }
+                if (str_starts_with($number, '-')) {
+                    return [null, 'قيمة سالبة غير مسموحة.', null];
+                }
+
+                return [$number, null, null];
+
+            case ColumnKind::DecimalSigned:
+                $number = $this->parseDecimal($raw);
+                if ($number === null) {
+                    return [null, 'قيمة رقمية غير صالحة.', null];
+                }
+
+                return [$number, null, null];
+
+            case ColumnKind::IntegerUnsigned:
+                $integer = $this->parseInteger($raw);
+                if ($integer === null || $integer < 0) {
+                    return [null, 'يجب أن تكون القيمة عددًا صحيحًا غير سالب.', null];
+                }
+
+                return [$integer, null, null];
+
+            case ColumnKind::Text:
+                return [trim((string) $raw), null, null];
+
+            case ColumnKind::EnumValue:
+                $value = strtoupper(trim((string) $raw));
+                if (! in_array($value, $column->allowed ?? [], true)) {
+                    return [null, 'قيمة غير مسموحة لهذا العمود.', null];
+                }
+
+                return [$value, null, null];
+
+            case ColumnKind::SelectedBranchCode:
+                // IMPORT-001 contract: the daily sales sheet is scoped to the
+                // single branch chosen at upload time.
+                $code = trim((string) $raw);
+                if ($code !== $branch->code) {
+                    return [null, 'كود الفرع لا يطابق الفرع المختار.', null];
+                }
+
+                return [$code, null, $code];
+
+            case ColumnKind::ClientBranchCode:
+                $code = trim((string) $raw);
+                if (! isset($branchCodeSet[$code])) {
+                    return [null, 'كود الفرع لا يتبع العميل المحدد.', null];
+                }
+
+                return [$code, null, $code];
+
+            case ColumnKind::BranchDefinitionCode:
+                return [trim((string) $raw), null, null];
+
+            case ColumnKind::ScopeBranchOrScope:
+                $code = trim((string) $raw);
+                if (in_array(strtoupper($code), ScopeCode::values(), true)) {
+                    return [strtoupper($code), null, null];
+                }
+                if (isset($branchCodeSet[$code])) {
+                    return [$code, null, $code];
+                }
+
+                return [null, 'النطاق يجب أن يكون كود فرع تابع للعميل أو HEAD_OFFICE أو CLIENT.', null];
+
+            case ColumnKind::ScopeOnly:
+                $value = strtoupper(trim((string) $raw));
+                if (! in_array($value, ScopeCode::values(), true)) {
+                    return [null, 'النطاق يجب أن يكون HEAD_OFFICE أو CLIENT.', null];
+                }
+
+                return [$value, null, null];
+        }
+
+        throw new \LogicException("Unhandled column kind for {$column->name}.");
+    }
+
+    private function singleError(string $sheet, string $column, string $reason): ImportValidationResult
+    {
+        return new ImportValidationResult([], [$this->error($sheet, 0, $column, null, $reason)]);
+    }
+
+    /**
+     * @return array{sheet:string, row:int, column:string, value:mixed, reason:string}
+     */
+    private function error(string $sheet, int $row, string $column, mixed $value, string $reason): array
+    {
+        return ['sheet' => $sheet, 'row' => $row, 'column' => $column, 'value' => $this->displayValue($value), 'reason' => $reason];
     }
 
     /**
      * @param  array<int, array<int, mixed>>  $rows
+     * @param  list<string>  $anchors
      */
-    private function findHeaderRow(array $rows): ?int
+    private function findHeaderRow(array $rows, array $anchors): ?int
     {
         foreach ($rows as $index => $row) {
             $values = array_map(fn ($cell) => is_string($cell) ? trim($cell) : $cell, $row);
-            if (in_array('date', $values, true) && in_array('branch_code', $values, true)) {
+            $matched = true;
+            foreach ($anchors as $anchor) {
+                if (! in_array($anchor, $values, true)) {
+                    $matched = false;
+                    break;
+                }
+            }
+            if ($matched) {
                 return $index;
             }
         }
@@ -125,84 +341,16 @@ class ValidatePerformanceImport
      * @param  array<int, mixed>  $row
      * @param  array<string, int>  $columnIndex
      */
-    private function isEmptyRow(array $row, array $columnIndex): bool
+    private function isEmptyRow(array $row, array $columnIndex, SheetDefinition $sheet): bool
     {
-        foreach ([...SalesDailySheet::REQUIRED_COLUMNS, ...SalesDailySheet::OPTIONAL_COLUMNS] as $column) {
-            $value = $row[$columnIndex[$column] ?? -1] ?? null;
+        foreach ($sheet->columnNames() as $name) {
+            $value = $row[$columnIndex[$name] ?? -1] ?? null;
             if (is_string($value) ? trim($value) !== '' : $value !== null) {
                 return false;
             }
         }
 
         return true;
-    }
-
-    /**
-     * @param  array<int, mixed>  $row
-     * @param  array<string, int>  $columnIndex
-     * @return array{0: array<string, mixed>, 1: list<array{row:int, column:string, value:mixed, reason:string}>}
-     */
-    private function validateRow(array $row, array $columnIndex, Branch $branch, string $period, int $excelRow): array
-    {
-        $data = [];
-        $errors = [];
-        $fail = function (string $column, mixed $value, string $reason) use (&$errors, $excelRow): void {
-            $errors[] = ['row' => $excelRow, 'column' => $column, 'value' => $this->displayValue($value), 'reason' => $reason];
-        };
-        $cell = fn (string $column) => $row[$columnIndex[$column]] ?? null;
-
-        $branchCode = trim((string) $cell('branch_code'));
-        if ($branchCode === '') {
-            $fail('branch_code', null, 'قيمة مطلوبة مفقودة.');
-        } elseif ($branchCode !== $branch->code) {
-            $fail('branch_code', $branchCode, 'كود الفرع لا يطابق الفرع المختار.');
-        } else {
-            $data['branch_code'] = $branchCode;
-        }
-
-        $date = $this->parseDate($cell('date'));
-        if ($date === null) {
-            $fail('date', $cell('date'), 'تاريخ غير صالح.');
-        } elseif ($date->format('Y-m') !== $period) {
-            $fail('date', $date->format('Y-m-d'), 'التاريخ خارج الفترة المحددة.');
-        } else {
-            $data['date'] = $date->format('Y-m-d');
-        }
-
-        foreach (SalesDailySheet::DECIMAL_COLUMNS as $column) {
-            $value = $cell($column);
-            $normalized = $this->parseDecimal($value);
-            if ($normalized === null) {
-                $fail($column, $value, 'قيمة رقمية غير صالحة.');
-            } elseif (str_starts_with($normalized, '-')) {
-                $fail($column, $value, 'قيمة سالبة غير مسموحة.');
-            } else {
-                $data[$column] = $normalized;
-            }
-        }
-
-        $orderCount = $this->parseInteger($cell('order_count'));
-        if ($orderCount === null || $orderCount < 0) {
-            $fail('order_count', $cell('order_count'), 'عدد الطلبات يجب أن يكون عددًا صحيحًا غير سالب.');
-        } else {
-            $data['order_count'] = $orderCount;
-        }
-
-        $status = strtoupper(trim((string) $cell('operating_status')));
-        if ($status === '') {
-            $fail('operating_status', null, 'قيمة مطلوبة مفقودة.');
-        } elseif (! in_array($status, SalesDailySheet::OPERATING_STATUSES, true)) {
-            $fail('operating_status', $status, 'حالة تشغيل غير معروفة.');
-        } else {
-            $data['operating_status'] = $status;
-        }
-
-        $note = trim((string) $cell('note'));
-        if ($note !== '') {
-            $data['note'] = $note;
-        }
-
-        return [$data, $errors];
     }
 
     private function parseDate(mixed $value): ?CarbonImmutable
@@ -220,6 +368,22 @@ class ValidatePerformanceImport
         } catch (Throwable) {
             return null;
         }
+    }
+
+    private function parseMonth(mixed $value): ?string
+    {
+        if (is_numeric($value)) {
+            $date = $this->parseDate($value);
+
+            return $date?->format('Y-m');
+        }
+
+        $trimmed = trim((string) $value);
+        if (preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $trimmed) === 1) {
+            return $trimmed;
+        }
+
+        return $this->parseDate($trimmed)?->format('Y-m');
     }
 
     private function parseDecimal(mixed $value): ?string
