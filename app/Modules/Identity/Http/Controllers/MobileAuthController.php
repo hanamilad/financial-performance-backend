@@ -16,12 +16,6 @@ use Illuminate\Validation\ValidationException;
 
 class MobileAuthController extends Controller
 {
-    /**
-     * Only `client_user` accounts may sign in from mobile. An unknown email, a
-     * wrong password and a `system_admin` account all fail with the same generic
-     * error so the response never reveals which condition was hit. The plaintext
-     * token is returned exactly once here and is never persisted or logged.
-     */
     public function login(MobileLoginRequest $request): JsonResponse
     {
         $user = User::query()
@@ -31,8 +25,6 @@ class MobileAuthController extends Controller
             ->with('client')
             ->first();
 
-        // A disabled account or a client whose access was switched off must fail
-        // with the same generic error as bad credentials, never a distinct one.
         $hasActiveClient = $user?->client?->status === EntityStatus::Active;
 
         if ($user === null || ! $hasActiveClient || ! Hash::check($request->validated('password'), $user->password)) {
@@ -56,8 +48,6 @@ class MobileAuthController extends Controller
 
     public function logout(Request $request): Response
     {
-        // Revoke only the token that made this request, leaving the user's other
-        // devices signed in.
         $request->user()->currentAccessToken()->delete();
 
         return response()->noContent();

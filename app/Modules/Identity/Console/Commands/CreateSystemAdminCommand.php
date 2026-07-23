@@ -12,13 +12,6 @@ use Illuminate\Validation\Rules\Password;
 use function Laravel\Prompts\password;
 use function Laravel\Prompts\text;
 
-/**
- * Creates the first (or any further) system administrator interactively.
- *
- * There is deliberately no seeder that ships credentials: the only way to
- * create an admin is to type the details here. The password is entered blind,
- * confirmed, hashed, and never echoed or logged.
- */
 class CreateSystemAdminCommand extends Command
 {
     protected $signature = 'identity:create-system-admin';
@@ -68,12 +61,6 @@ class CreateSystemAdminCommand extends Command
         return self::SUCCESS;
     }
 
-    /**
-     * Validate a single value and return the first error message, or null when
-     * it passes — the shape Laravel Prompts expects from a validate closure.
-     *
-     * @param  array<int, mixed>  $rules
-     */
     private function fieldError(string $attribute, string $value, array $rules): ?string
     {
         $validator = Validator::make([$attribute => $value], [$attribute => $rules]);

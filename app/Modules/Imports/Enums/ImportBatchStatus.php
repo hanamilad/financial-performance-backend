@@ -12,4 +12,23 @@ enum ImportBatchStatus: string
     case ValidationFailed = 'validation_failed';
     case Validated = 'validated';
     case Draft = 'draft';
+    case UnderReview = 'under_review';
+    case Approved = 'approved';
+    case Published = 'published';
+
+    public function isDeletable(): bool
+    {
+        return in_array($this, [self::ValidationFailed, self::Draft], true);
+    }
+
+    public function blocksReupload(): bool
+    {
+        return in_array($this, [
+            self::Draft,
+            self::Validated,
+            self::UnderReview,
+            self::Approved,
+            self::Published,
+        ], true);
+    }
 }

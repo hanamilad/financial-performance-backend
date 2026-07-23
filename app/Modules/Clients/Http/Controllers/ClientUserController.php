@@ -28,7 +28,6 @@ class ClientUserController extends Controller
 
     public function update(UpdateClientUserRequest $request, User $clientUser): ClientUserResource
     {
-        // This endpoint manages client users only; it must never edit an admin.
         abort_unless($clientUser->role === UserRole::ClientUser, 403);
 
         $data = $request->validated();

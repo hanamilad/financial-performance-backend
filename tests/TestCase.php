@@ -7,14 +7,6 @@ use RuntimeException;
 
 abstract class TestCase extends BaseTestCase
 {
-    /**
-     * Run the test-database safety guard immediately after the application is
-     * booted and before any test trait runs.
-     *
-     * refreshApplication() is called from setUp() BEFORE setUpTraits(), so this
-     * fires before RefreshDatabase can start migrating — protecting the
-     * development database from ever being reached by a misconfigured suite.
-     */
     protected function refreshApplication()
     {
         parent::refreshApplication();
@@ -28,12 +20,6 @@ abstract class TestCase extends BaseTestCase
         );
     }
 
-    /**
-     * Pure, side-effect-free guard. Throws before any connection or migration
-     * if the environment is not the isolated MySQL test database. Extracted as
-     * a static method so it can be proven by a test without touching any
-     * database (see TestDatabaseGuardTest).
-     */
     public static function assertSafeTestDatabase(string $environment, string $driver, string $database): void
     {
         if ($environment !== 'testing') {

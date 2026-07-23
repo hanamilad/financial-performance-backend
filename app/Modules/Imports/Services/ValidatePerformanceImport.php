@@ -27,8 +27,6 @@ class ValidatePerformanceImport
         $reader = new PerformanceWorkbookReader;
 
         try {
-            // The reader type is passed explicitly: an uploaded temp file has no
-            // .xlsx extension, so maatwebsite cannot infer it and would throw.
             Excel::import($reader, $file, null, ExcelFormat::XLSX);
         } catch (Throwable) {
             return $this->singleError('file', 'file', 'تعذّر قراءة ملف Excel. تأكد من أنه ملف صالح.');
@@ -106,11 +104,6 @@ class ValidatePerformanceImport
         return new ImportValidationResult($validRows, $errors);
     }
 
-    /**
-     * @param  list<array{sheet:string, row:int, column:string, code:string}>  $references
-     * @param  array<string, bool>  $declaredBranchCodes
-     * @return list<array{sheet:string, row:int, column:string, value:mixed, reason:string}>
-     */
     private function crossSheetBranchErrors(array $references, array $declaredBranchCodes): array
     {
         if ($declaredBranchCodes === []) {
@@ -130,12 +123,6 @@ class ValidatePerformanceImport
         return $errors;
     }
 
-    /**
-     * @param  array<int, mixed>  $row
-     * @param  array<string, int>  $columnIndex
-     * @param  array<string, bool>  $branchCodeSet
-     * @return array{0: array<string, mixed>, 1: list<array{sheet:string, row:int, column:string, value:mixed, reason:string}>, 2: list<array{sheet:string, row:int, column:string, code:string}>}
-     */
     private function validateRow(SheetDefinition $sheet, array $row, array $columnIndex, Branch $branch, string $period, int $excelRow, array $branchCodeSet): array
     {
         $data = [];
@@ -173,10 +160,6 @@ class ValidatePerformanceImport
         return [$data, $errors, $references];
     }
 
-    /**
-     * @param  array<string, bool>  $branchCodeSet
-     * @return array{0: mixed, 1: ?string, 2: ?string}
-     */
     private function validateCell(ColumnSpec $column, mixed $raw, Branch $branch, string $period, array $branchCodeSet): array
     {
         switch ($column->kind) {
@@ -241,8 +224,6 @@ class ValidatePerformanceImport
                 return [$value, null, null];
 
             case ColumnKind::SelectedBranchCode:
-                // IMPORT-001 contract: the daily sales sheet is scoped to the
-                // single branch chosen at upload time.
                 $code = trim((string) $raw);
                 if ($code !== $branch->code) {
                     return [null, 'كود الفرع لا يطابق الفرع المختار.', null];
@@ -289,18 +270,11 @@ class ValidatePerformanceImport
         return new ImportValidationResult([], [$this->error($sheet, 0, $column, null, $reason)]);
     }
 
-    /**
-     * @return array{sheet:string, row:int, column:string, value:mixed, reason:string}
-     */
     private function error(string $sheet, int $row, string $column, mixed $value, string $reason): array
     {
         return ['sheet' => $sheet, 'row' => $row, 'column' => $column, 'value' => $this->displayValue($value), 'reason' => $reason];
     }
 
-    /**
-     * @param  array<int, array<int, mixed>>  $rows
-     * @param  list<string>  $anchors
-     */
     private function findHeaderRow(array $rows, array $anchors): ?int
     {
         foreach ($rows as $index => $row) {
@@ -320,10 +294,6 @@ class ValidatePerformanceImport
         return null;
     }
 
-    /**
-     * @param  array<int, mixed>  $headerRow
-     * @return array<string, int>
-     */
     private function mapColumns(array $headerRow): array
     {
         $map = [];
@@ -337,10 +307,6 @@ class ValidatePerformanceImport
         return $map;
     }
 
-    /**
-     * @param  array<int, mixed>  $row
-     * @param  array<string, int>  $columnIndex
-     */
     private function isEmptyRow(array $row, array $columnIndex, SheetDefinition $sheet): bool
     {
         foreach ($sheet->columnNames() as $name) {

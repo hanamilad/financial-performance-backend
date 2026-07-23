@@ -14,9 +14,6 @@ class StoreBranchRequest extends FormRequest
         return true;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     public function rules(): array
     {
         $client = $this->route('client');

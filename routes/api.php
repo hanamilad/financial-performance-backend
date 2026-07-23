@@ -9,18 +9,6 @@ use App\Modules\Identity\Http\Controllers\MobileAuthController;
 use App\Modules\Imports\Http\Controllers\ImportController;
 use Illuminate\Support\Facades\Route;
 
-/*
-|--------------------------------------------------------------------------
-| API Routes
-|--------------------------------------------------------------------------
-|
-| This file is registered manually through withRouting(api: ...) in
-| bootstrap/app.php, which already applies the "api" prefix. Only the version
-| segment is added here, so routes resolve as /api/v1/... and never
-| /api/api/v1/... (FOUNDATION-004).
-|
-*/
-
 Route::prefix('v1')
     ->name('api.v1.')
     ->group(function (): void {
@@ -29,21 +17,15 @@ Route::prefix('v1')
         Route::prefix('auth')
             ->name('auth.')
             ->group(function (): void {
-                // Public: system-admin cookie login, throttled per email+IP.
                 Route::post('/login', [AuthController::class, 'login'])
                     ->middleware('throttle:login')
                     ->name('login');
 
-                // Protected: resolved from the Sanctum stateful session. The
-                // auth:sanctum middleware is also what makes Scramble document
-                // these two operations as requiring authentication.
                 Route::middleware('auth:sanctum')->group(function (): void {
                     Route::get('/me', [AuthController::class, 'me'])->name('me');
                     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
                 });
 
-                // Mobile client_user authentication via Sanctum bearer tokens,
-                // one token per device (AUTH-002).
                 Route::prefix('mobile')
                     ->name('mobile.')
                     ->group(function (): void {
@@ -58,8 +40,6 @@ Route::prefix('v1')
                     });
             });
 
-        // System-admin management APIs (CLIENTS-001). auth:sanctum authenticates
-        // the request; system_admin then rejects any client_user with 403.
         Route::prefix('admin')
             ->name('admin.')
             ->middleware(['auth:sanctum', 'system_admin'])
@@ -78,6 +58,10 @@ Route::prefix('v1')
                 Route::get('/imports', [ImportController::class, 'index'])->name('imports.index');
                 Route::post('/imports', [ImportController::class, 'store'])->name('imports.store');
                 Route::get('/imports/{importBatch}', [ImportController::class, 'show'])->name('imports.show');
+                Route::post('/imports/{importBatch}/submit', [ImportController::class, 'submit'])->name('imports.submit');
+                Route::post('/imports/{importBatch}/approve', [ImportController::class, 'approve'])->name('imports.approve');
+                Route::post('/imports/{importBatch}/return-to-draft', [ImportController::class, 'returnToDraft'])->name('imports.return-to-draft');
+                Route::post('/imports/{importBatch}/publish', [ImportController::class, 'publish'])->name('imports.publish');
                 Route::delete('/imports/{importBatch}', [ImportController::class, 'destroy'])->name('imports.destroy');
             });
     });

@@ -2,28 +2,16 @@
 
 namespace Database\Factories;
 
-use App\Models\User;
 use App\Modules\Clients\Models\Client;
 use App\Modules\Identity\Enums\UserRole;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-/**
- * @extends Factory<User>
- */
 class UserFactory extends Factory
 {
-    /**
-     * The current password being used by the factory.
-     */
     protected static ?string $password;
 
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
         return [
@@ -38,9 +26,6 @@ class UserFactory extends Factory
         ];
     }
 
-    /**
-     * Indicate that the model's email address should be unverified.
-     */
     public function unverified(): static
     {
         return $this->state(fn (array $attributes) => [
@@ -48,9 +33,6 @@ class UserFactory extends Factory
         ]);
     }
 
-    /**
-     * Indicate that the user is a system administrator.
-     */
     public function systemAdmin(): static
     {
         return $this->state(fn (array $attributes) => [
@@ -59,9 +41,6 @@ class UserFactory extends Factory
         ]);
     }
 
-    /**
-     * Indicate that the user is a client user.
-     */
     public function clientUser(): static
     {
         return $this->state(fn (array $attributes) => [
@@ -69,9 +48,6 @@ class UserFactory extends Factory
         ]);
     }
 
-    /**
-     * Indicate that the user's access is disabled.
-     */
     public function inactive(): static
     {
         return $this->state(fn (array $attributes) => [

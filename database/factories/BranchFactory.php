@@ -8,16 +8,10 @@ use App\Modules\Clients\Models\Client;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
-/**
- * @extends Factory<Branch>
- */
 class BranchFactory extends Factory
 {
     protected $model = Branch::class;
 
-    /**
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
         return [

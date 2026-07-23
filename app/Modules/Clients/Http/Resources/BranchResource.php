@@ -2,18 +2,11 @@
 
 namespace App\Modules\Clients\Http\Resources;
 
-use App\Modules\Clients\Models\Branch;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/**
- * @mixin Branch
- */
 class BranchResource extends JsonResource
 {
-    /**
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
         return [

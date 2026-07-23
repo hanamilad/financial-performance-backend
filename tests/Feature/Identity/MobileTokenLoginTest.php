@@ -5,17 +5,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
-/*
-|--------------------------------------------------------------------------
-| Mobile bearer-token login (AUTH-002)
-|--------------------------------------------------------------------------
-|
-| These tests never send an Origin/Referer, so Sanctum treats every request as
-| token-based (not the stateful cookie path) — exactly how the mobile app talks
-| to the API.
-|
-*/
-
 uses(RefreshDatabase::class);
 
 it('issues a per-device token to a client user', function () {
@@ -40,7 +29,6 @@ it('issues a per-device token to a client user', function () {
     expect($plainText)->toBeString()->not->toBeEmpty();
 
     $stored = (string) DB::table('personal_access_tokens')->where('name', 'pixel-8')->value('token');
-    // Sanctum persists only the SHA-256 hash, never the plaintext token.
     expect(strlen($stored))->toBe(64)
         ->and($plainText)->not->toContain($stored);
 });
@@ -128,8 +116,6 @@ it('logout revokes only the current device token', function () {
 
     expect($user->tokens()->count())->toBe(1);
 
-    // The auth guard caches the resolved user for the test process; forget it so
-    // each follow-up request re-evaluates the presented token from scratch.
     $this->app['auth']->forgetGuards();
     $this->withHeader('Authorization', 'Bearer '.$tokenA)
         ->getJson('/api/v1/auth/mobile/me')

@@ -2,25 +2,6 @@
 
 use Illuminate\Support\Facades\DB;
 
-/*
-|--------------------------------------------------------------------------
-| Readiness endpoint — GET /api/v1/health
-|--------------------------------------------------------------------------
-|
-| No RefreshDatabase: the probe only runs SELECT 1, so it needs no schema and
-| must never migrate anything.
-|
-| Failure is simulated by pointing ONLY the dedicated health connections at a
-| closed local port and purging them. Containers are never stopped and the
-| application's own "mysql" / Redis "default" connections are never touched,
-| so the test-database guard in tests/TestCase.php stays intact and no test
-| depends on the order of any other.
-|
-*/
-
-/**
- * Run $callback with the health_mysql connection pointed at a closed port.
- */
 function withUnreachableHealthDatabase(Closure $callback): void
 {
     $original = config('database.connections.health_mysql');
@@ -39,13 +20,6 @@ function withUnreachableHealthDatabase(Closure $callback): void
     }
 }
 
-/**
- * Run $callback with the health_redis connection pointed at a closed port.
- *
- * RedisManager captures database.redis once, when it is first resolved, so the
- * instance is forgotten as well as purged — otherwise a manager built earlier
- * in the request lifecycle would keep serving the original configuration.
- */
 function withUnreachableHealthRedis(Closure $callback): void
 {
     $original = config('database.redis.health_redis');

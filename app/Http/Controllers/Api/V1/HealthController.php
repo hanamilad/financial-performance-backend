@@ -8,15 +8,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Throwable;
 
-/**
- * Readiness endpoint: reports whether the application can reach the backing
- * services it needs to serve real traffic. Liveness stays on GET /up.
- *
- * The response body is deliberately limited to {status, services}: no
- * exception text, driver detail, host, port, database name, credential,
- * SQLSTATE, stack trace, timing or version is ever disclosed, because this
- * endpoint is unauthenticated at this stage (FOUNDATION-004, DEC-039).
- */
 class HealthController extends Controller
 {
     public function __invoke(): JsonResponse
@@ -36,10 +27,6 @@ class HealthController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
-    /**
-     * Probe MySQL over the dedicated short-timeout health connection so the
-     * application's own pooling and timeouts stay untouched (DEC-040).
-     */
     private function checkDatabase(): bool
     {
         try {
@@ -51,10 +38,6 @@ class HealthController extends Controller
         }
     }
 
-    /**
-     * Probe Redis over the dedicated short-timeout health connection, never
-     * the default/cache connections (DEC-040).
-     */
     private function checkRedis(): bool
     {
         try {

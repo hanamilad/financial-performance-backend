@@ -21,9 +21,6 @@ class ImportRow extends Model
         ];
     }
 
-    /**
-     * @return BelongsTo<ImportBatch, $this>
-     */
     public function batch(): BelongsTo
     {
         return $this->belongsTo(ImportBatch::class, 'import_batch_id');

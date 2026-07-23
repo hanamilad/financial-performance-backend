@@ -8,19 +8,10 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 
 class PerformanceWorkbookReader implements SkipsUnknownSheets, WithMultipleSheets
 {
-    /** @var array<string, array<int, array<int, mixed>>> */
     public array $sheetRows = [];
 
-    /** @var array<string, bool> */
     public array $sheetFound = [];
 
-    /**
-     * Only the data sheets in WorkbookDefinition are registered, so the helper
-     * sheets (README, LISTS, EXAMPLES, VALIDATION_CHECKS) are never read into
-     * memory or stored.
-     *
-     * @return array<string, object>
-     */
     public function sheets(): array
     {
         $handlers = [];
@@ -34,9 +25,6 @@ class PerformanceWorkbookReader implements SkipsUnknownSheets, WithMultipleSheet
                     private string $sheet,
                 ) {}
 
-                /**
-                 * @param  array<int, array<int, mixed>>  $rows
-                 */
                 public function array(array $rows): void
                 {
                     $this->reader->sheetRows[$this->sheet] = $rows;
@@ -48,15 +36,5 @@ class PerformanceWorkbookReader implements SkipsUnknownSheets, WithMultipleSheet
         return $handlers;
     }
 
-    /**
-     * A registered data sheet that is absent from the uploaded file is left with
-     * its found flag false so the validator reports it as a missing sheet,
-     * instead of maatwebsite aborting the whole read.
-     *
-     * @param  string|int  $sheetName
-     */
-    public function onUnknownSheet($sheetName): void
-    {
-        //
-    }
+    public function onUnknownSheet($sheetName): void {}
 }

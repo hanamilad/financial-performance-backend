@@ -4,26 +4,9 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 
-/*
-|--------------------------------------------------------------------------
-| System-admin cookie login (AUTH-001)
-|--------------------------------------------------------------------------
-|
-| These tests exercise the real stateful flow: they POST credentials to the
-| login route and let the session cookie carry the identity into /me and
-| /logout, rather than short-circuiting with actingAs(). Test requests use the
-| host `localhost`, which is a configured stateful domain, so Sanctum resolves
-| the web session exactly as the admin web panel will.
-|
-*/
-
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    // Sanctum only opens a session for requests coming from a stateful domain.
-    // A browser sends that Origin automatically; the test must set it so the
-    // real cookie flow — not the token fallback — is exercised. localhost:3000
-    // is a configured stateful domain (the admin web dev origin).
     $this->withHeader('Origin', 'http://localhost:3000');
 });
 
@@ -64,8 +47,6 @@ it('rejects an incorrect password without revealing the account', function () {
 });
 
 it('refuses a client user through the admin cookie login', function () {
-    // Correct password, but the account is not a system admin: the role
-    // constraint must reject it with the same generic error as a bad password.
     User::factory()->clientUser()->create([
         'email' => 'client@fpp.test',
         'password' => Hash::make('correct-horse-battery'),
@@ -139,10 +120,6 @@ it('ends the session on logout', function () {
 
     $this->assertGuest('web');
 
-    // The auth guard caches the resolved user for the lifetime of the test
-    // process, which a real request (a fresh process) never does. Forget the
-    // cached guards so the next request re-reads the now-invalidated session,
-    // proving logout ended it server-side and not just in memory.
     $this->app['auth']->forgetGuards();
 
     $this->getJson('/api/v1/auth/me')->assertUnauthorized();

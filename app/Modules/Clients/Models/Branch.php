@@ -12,7 +12,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[UseFactory(BranchFactory::class)]
 class Branch extends Model
 {
-    /** @use HasFactory<BranchFactory> */
     use HasFactory;
 
     protected $fillable = ['client_id', 'name', 'code', 'city', 'status'];
@@ -24,9 +23,6 @@ class Branch extends Model
         ];
     }
 
-    /**
-     * @return BelongsTo<Client, $this>
-     */
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);

@@ -2,29 +2,10 @@
 
 return [
 
-    /*
-    |--------------------------------------------------------------------------
-    | Cross-Origin Resource Sharing (CORS) Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Here you may configure your settings for cross-origin resource sharing
-    | or "CORS". This determines what cross-origin operations may execute
-    | in web browsers. You are free to adjust these settings as needed.
-    |
-    | To learn more: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
-    |
-    */
-
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],
 
-    /*
-     * Cookie authentication requires an explicit origin allow-list — a wildcard
-     * is invalid once credentials are shared. Defaults to the local admin-web
-     * dev origins; production origins are supplied through the environment and
-     * are never guessed here (AUTH-001).
-     */
     'allowed_origins' => array_values(array_filter(array_map(
         'trim',
         explode(',', (string) env(

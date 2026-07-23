@@ -9,14 +9,6 @@ use App\Modules\Imports\Enums\OperatingStatus;
 use App\Modules\Imports\Enums\OtherItemType;
 use App\Modules\Imports\Enums\PlatformCode;
 
-/**
- * The import contract for the approved workbook
- * (restaurant_performance_template_v1.xlsx). Every column, its type, and its
- * required/optional flag are taken from the template's machine-header row and
- * its cell colouring (yellow = required, white = optional, grey = calculated),
- * not from guesswork. README/LISTS/EXAMPLES/VALIDATION_CHECKS are helper sheets
- * and are intentionally absent here, so they are never read or stored.
- */
 final class WorkbookDefinition
 {
     public const BRANCHES = 'BRANCHES';
@@ -37,9 +29,6 @@ final class WorkbookDefinition
 
     public const TARGETS_MONTHLY = 'TARGETS_MONTHLY';
 
-    /**
-     * @return list<SheetDefinition>
-     */
     public static function sheets(): array
     {
         return [
@@ -55,9 +44,6 @@ final class WorkbookDefinition
         ];
     }
 
-    /**
-     * @return list<string>
-     */
     public static function sheetNames(): array
     {
         return array_map(fn (SheetDefinition $sheet) => $sheet->name, self::sheets());
@@ -144,8 +130,6 @@ final class WorkbookDefinition
         return new SheetDefinition(self::FINANCIAL_POSITION, [
             new ColumnSpec('report_date', ColumnKind::DateWithinPeriod),
             new ColumnSpec('scope_code', ColumnKind::ScopeOnly),
-            // Balance-sheet lines may be negative (contra-asset accumulated
-            // depreciation, drawings, accumulated losses), so they are signed.
             ...self::signedDecimals([
                 'cash_on_hand', 'bank_balances', 'wallet_balances', 'platform_receivables',
                 'trade_receivables', 'inventory', 'prepaid_expenses', 'other_current_assets',
@@ -203,10 +187,6 @@ final class WorkbookDefinition
         ]);
     }
 
-    /**
-     * @param  list<string>  $names
-     * @return list<ColumnSpec>
-     */
     private static function decimals(array $names, bool $required = true): array
     {
         return array_map(
@@ -215,10 +195,6 @@ final class WorkbookDefinition
         );
     }
 
-    /**
-     * @param  list<string>  $names
-     * @return list<ColumnSpec>
-     */
     private static function signedDecimals(array $names): array
     {
         return array_map(

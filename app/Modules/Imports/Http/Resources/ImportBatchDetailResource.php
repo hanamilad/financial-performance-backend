@@ -2,20 +2,12 @@
 
 namespace App\Modules\Imports\Http\Resources;
 
-use App\Modules\Imports\Models\ImportBatch;
-use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Imports\Support\WorkbookDefinition;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
-/**
- * @mixin ImportBatch
- */
 class ImportBatchDetailResource extends ImportBatchResource
 {
-    /**
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
         $errors = $this->errors ?? [];
@@ -25,6 +17,13 @@ class ImportBatchDetailResource extends ImportBatchResource
             ...parent::toArray($request),
             'errors' => $errors,
             'sheets' => $this->sheetSummaries($rows, $errors),
+            'submitted_at' => $this->submitted_at,
+            'submitted_by_name' => $this->whenLoaded('submitter', fn () => $this->submitter?->name),
+            'approved_at' => $this->approved_at,
+            'approved_by_name' => $this->whenLoaded('approver', fn () => $this->approver?->name),
+            'published_at' => $this->published_at,
+            'published_by_name' => $this->whenLoaded('publisher', fn () => $this->publisher?->name),
+            'review_note' => $this->review_note,
             'rows' => $rows->map(fn ($row) => [
                 'sheet_name' => $row->sheet_name,
                 'row_number' => $row->row_number,
@@ -33,11 +32,6 @@ class ImportBatchDetailResource extends ImportBatchResource
         ];
     }
 
-    /**
-     * @param  Collection<int, ImportRow>  $rows
-     * @param  list<array{sheet:string, row:int, column:string, value:mixed, reason:string}>  $errors
-     * @return list<array{sheet:string, row_count:int, error_count:int}>
-     */
     private function sheetSummaries(Collection $rows, array $errors): array
     {
         $rowCounts = $rows->countBy('sheet_name');

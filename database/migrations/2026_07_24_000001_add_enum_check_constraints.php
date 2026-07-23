@@ -9,13 +9,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * The status/role columns are stored as strings and cast to backed enums in
-     * the models; these CHECK constraints stop any write outside the enum's
-     * values, matching the values 1:1 so the database and the enums cannot drift.
-     *
-     * @return array<string, array{table: string, column: string, values: list<string>}>
-     */
     private function constraints(): array
     {
         return [

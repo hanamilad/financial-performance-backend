@@ -4,9 +4,6 @@ namespace App\Modules\Imports\Support;
 
 final class ColumnSpec
 {
-    /**
-     * @param  list<string>|null  $allowed  Accepted values for ColumnKind::EnumValue.
-     */
     public function __construct(
         public readonly string $name,
         public readonly ColumnKind $kind,

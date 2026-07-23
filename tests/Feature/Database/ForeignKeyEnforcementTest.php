@@ -3,11 +3,6 @@
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
-/**
- * No RefreshDatabase here on purpose: this test issues DDL, and MySQL implicitly
- * commits DDL, which would break a wrapping transaction. The bespoke tables are
- * therefore dropped explicitly in `finally`, even if an assertion fails.
- */
 test('InnoDB enforces foreign key constraints', function () {
     $parent = 'fpp_fk_parent';
     $child = 'fpp_fk_child';
@@ -29,11 +24,9 @@ test('InnoDB enforces foreign key constraints', function () {
 
         DB::table($parent)->insert(['id' => 1]);
 
-        // A valid reference is accepted.
         DB::table($child)->insert(['id' => 1, 'parent_id' => 1]);
         expect(DB::table($child)->count())->toBe(1);
 
-        // A dangling reference is rejected by the engine.
         expect(fn () => DB::table($child)->insert(['id' => 2, 'parent_id' => 999999]))
             ->toThrow(QueryException::class);
     } finally {

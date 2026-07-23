@@ -10,27 +10,13 @@ use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
-    public function register(): void
-    {
-        //
-    }
+    public function register(): void {}
 
-    /**
-     * Bootstrap any application services.
-     */
     public function boot(): void
     {
         $this->configureRateLimiters();
     }
 
-    /**
-     * Throttle login attempts on two axes: tightly per email+IP to slow
-     * credential stuffing against one account, and more loosely per IP to blunt
-     * spraying across many accounts from one source (AUTH-001).
-     */
     private function configureRateLimiters(): void
     {
         $perEmailAndIp = function (Request $request): array {

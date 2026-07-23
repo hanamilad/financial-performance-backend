@@ -12,13 +12,6 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
 
 uses(RefreshDatabase::class);
 
-/**
- * Machine header keys per sheet, matching the approved template's snake_case
- * header row. Kept here (not derived from the app) so a drift in the backend
- * column contract is caught by the tests.
- *
- * @return array<string, list<string>>
- */
 function sheetHeaders(): array
 {
     return [
@@ -61,11 +54,6 @@ function sheetHeaders(): array
     ];
 }
 
-/**
- * One valid data row per sheet for the given branch, keyed by machine header.
- *
- * @return array<string, array<string, mixed>>
- */
 function defaultRow(string $branchCode): array
 {
     $financial = ['report_date' => '2026-01-31', 'scope_code' => 'CLIENT'];
@@ -109,15 +97,6 @@ function defaultRow(string $branchCode): array
     ];
 }
 
-/**
- * Build a complete workbook. Options:
- * - omit: list<string> sheet names to leave out entirely.
- * - headers: array<string, list<string>> header overrides (drop columns).
- * - rows: array<string, list<array<string, mixed>>> replaces a sheet's rows.
- * - extraRows: array<string, list<array<string, mixed>>> appended to defaults.
- *
- * @param  array{omit?: list<string>, headers?: array<string, list<string>>, rows?: array<string, list<array<string, mixed>>>, extraRows?: array<string, list<array<string, mixed>>>}  $options
- */
 function performanceWorkbook(string $branchCode, array $options = []): UploadedFile
 {
     $omit = $options['omit'] ?? [];
@@ -160,10 +139,6 @@ function branchForImport(string $code = 'BR-1'): Branch
     return Branch::factory()->for(Client::factory())->create(['code' => $code]);
 }
 
-/**
- * @param  array{omit?: list<string>, headers?: array<string, list<string>>, rows?: array<string, list<array<string, mixed>>>, extraRows?: array<string, list<array<string, mixed>>>}  $options
- * @return array<string, mixed>
- */
 function uploadWorkbook(Branch $branch, array $options = [], string $period = '2026-01'): array
 {
     return [
@@ -183,7 +158,6 @@ it('accepts a complete workbook and stores every sheet as a draft', function () 
         ->assertJsonPath('data.status', 'draft')
         ->assertJsonPath('data.error_count', 0);
 
-    // One valid row per data sheet.
     expect($response->json('data.row_count'))->toBe(9);
 
     $batch = ImportBatch::sole();
@@ -271,7 +245,6 @@ it('flags a cross-sheet branch not declared in the BRANCHES sheet', function () 
     actingAsSystemAdmin();
     $client = Client::factory()->create();
     $branch = Branch::factory()->for($client)->create(['code' => 'BR-1']);
-    // A second real branch of the same client, absent from the BRANCHES sheet.
     Branch::factory()->for($client)->create(['code' => 'BR-2']);
 
     $rows = ['TARGETS_MONTHLY' => [array_merge(defaultRow('BR-1')['TARGETS_MONTHLY'], ['branch_code' => 'BR-2'])]];
@@ -292,7 +265,6 @@ it('keeps the SALES_DAILY branch scoped to the selected branch', function () {
     $branch = Branch::factory()->for($client)->create(['code' => 'BR-1']);
     Branch::factory()->for($client)->create(['code' => 'BR-2']);
 
-    // BR-2 belongs to the client but is not the selected branch.
     $rows = [
         'BRANCHES' => [defaultRow('BR-1')['BRANCHES'], defaultRow('BR-2')['BRANCHES']],
         'SALES_DAILY' => [array_merge(defaultRow('BR-1')['SALES_DAILY'], ['branch_code' => 'BR-2'])],

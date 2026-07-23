@@ -22,6 +22,13 @@ class ImportBatch extends Model
         'error_count',
         'errors',
         'uploaded_by',
+        'submitted_at',
+        'submitted_by',
+        'approved_at',
+        'approved_by',
+        'published_at',
+        'published_by',
+        'review_note',
     ];
 
     protected function casts(): array
@@ -29,36 +36,42 @@ class ImportBatch extends Model
         return [
             'status' => ImportBatchStatus::class,
             'errors' => 'array',
+            'submitted_at' => 'datetime',
+            'approved_at' => 'datetime',
+            'published_at' => 'datetime',
         ];
     }
 
-    /**
-     * @return BelongsTo<Client, $this>
-     */
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
     }
 
-    /**
-     * @return BelongsTo<Branch, $this>
-     */
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
     }
 
-    /**
-     * @return BelongsTo<User, $this>
-     */
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 
-    /**
-     * @return HasMany<ImportRow, $this>
-     */
+    public function submitter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by');
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function publisher(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'published_by');
+    }
+
     public function rows(): HasMany
     {
         return $this->hasMany(ImportRow::class);

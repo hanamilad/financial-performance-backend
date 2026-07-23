@@ -2,18 +2,11 @@
 
 namespace App\Modules\Imports\Http\Resources;
 
-use App\Modules\Imports\Models\ImportBatch;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/**
- * @mixin ImportBatch
- */
 class ImportBatchResource extends JsonResource
 {
-    /**
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
         return [

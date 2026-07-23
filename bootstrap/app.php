@@ -18,9 +18,6 @@ return Application::configure(basePath: dirname(__DIR__))
         CreateSystemAdminCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
-        // Prepends EnsureFrontendRequestsAreStateful to the api group so
-        // requests from the configured stateful domains authenticate with the
-        // session cookie and CSRF token instead of a bearer token (AUTH-001).
         $middleware->statefulApi();
 
         $middleware->alias([

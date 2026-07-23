@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[UseFactory(ClientFactory::class)]
 class Client extends Model
 {
-    /** @use HasFactory<ClientFactory> */
     use HasFactory;
 
     protected $fillable = ['name', 'code', 'status'];
@@ -25,17 +24,11 @@ class Client extends Model
         ];
     }
 
-    /**
-     * @return HasMany<Branch, $this>
-     */
     public function branches(): HasMany
     {
         return $this->hasMany(Branch::class);
     }
 
-    /**
-     * @return HasMany<User, $this>
-     */
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
