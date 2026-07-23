@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Identity\Console\Commands\CreateSystemAdminCommand;
+use App\Modules\Identity\Http\Middleware\EnsureSystemAdmin;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -21,6 +22,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // requests from the configured stateful domains authenticate with the
         // session cookie and CSRF token instead of a bearer token (AUTH-001).
         $middleware->statefulApi();
+
+        $middleware->alias([
+            'system_admin' => EnsureSystemAdmin::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

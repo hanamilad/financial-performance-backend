@@ -4,6 +4,7 @@ namespace App\Modules\Identity\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Modules\Clients\Enums\EntityStatus;
 use App\Modules\Identity\Enums\UserRole;
 use App\Modules\Identity\Http\Requests\MobileLoginRequest;
 use App\Modules\Identity\Http\Resources\AuthenticatedUserResource;
@@ -26,9 +27,15 @@ class MobileAuthController extends Controller
         $user = User::query()
             ->where('email', $request->validated('email'))
             ->where('role', UserRole::ClientUser->value)
+            ->where('is_active', true)
+            ->with('client')
             ->first();
 
-        if ($user === null || ! Hash::check($request->validated('password'), $user->password)) {
+        // A disabled account or a client whose access was switched off must fail
+        // with the same generic error as bad credentials, never a distinct one.
+        $hasActiveClient = $user?->client?->status === EntityStatus::Active;
+
+        if ($user === null || ! $hasActiveClient || ! Hash::check($request->validated('password'), $user->password)) {
             throw ValidationException::withMessages([
                 'email' => [__('auth.failed')],
             ]);

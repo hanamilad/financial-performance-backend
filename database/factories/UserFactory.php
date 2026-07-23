@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\User;
+use App\Modules\Clients\Models\Client;
 use App\Modules\Identity\Enums\UserRole;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -31,6 +32,8 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'role' => UserRole::ClientUser,
+            'client_id' => Client::factory(),
+            'is_active' => true,
             'remember_token' => Str::random(10),
         ];
     }
@@ -52,6 +55,7 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'role' => UserRole::SystemAdmin,
+            'client_id' => null,
         ]);
     }
 
@@ -62,6 +66,16 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'role' => UserRole::ClientUser,
+        ]);
+    }
+
+    /**
+     * Indicate that the user's access is disabled.
+     */
+    public function inactive(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_active' => false,
         ]);
     }
 }

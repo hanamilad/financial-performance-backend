@@ -32,6 +32,7 @@ class AuthController extends Controller
             'email' => $request->validated('email'),
             'password' => $request->validated('password'),
             'role' => UserRole::SystemAdmin->value,
+            'is_active' => true,
         ];
 
         if (! Auth::guard('web')->attempt($credentials)) {

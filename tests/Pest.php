@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\User;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 /*
@@ -51,4 +53,12 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+function actingAsSystemAdmin(): User
+{
+    $admin = User::factory()->systemAdmin()->create();
+    Sanctum::actingAs($admin);
+
+    return $admin;
 }
